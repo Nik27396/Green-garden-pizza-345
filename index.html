@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Garden Pizza - Digital Menu & Table Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Supabase JS SDK CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .hide { display: none !important; }
+        @media print {
+            body * { visibility: hidden; }
+            #printableBill, #printableBill * { visibility: visible; }
+            #printableBill { position: absolute; left: 0; top: 0; width: 100%; background: white !important; color: black !important; }
+        }
+    </style>
+</head>
+<body class="bg-stone-900 text-stone-100 min-h-screen flex flex-col">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-stone-950 border-b border-stone-800 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="switchView('menu')">
+                <div class="bg-emerald-600 text-white p-2.5 rounded-xl shadow-lg flex items-center justify-center">
+                    <i class="fa-solid fa-pizza-slice text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight text-emerald-400">The Garden Pizza</h1>
+                    <p class="text-xs text-stone-400">Freshly Baked • Made With Love</p>
+                </div>
+            </div>
+
+            <!-- Context Info / Table Badge -->
+            <div id="tableBadgeContainer" class="hidden items-center bg-emerald-950 border border-emerald-800 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-300">
+                <i class="fa-solid fa-chair mr-1.5"></i> Ordering for: <span id="currentTableLabel" class="ml-1 underline font-bold">Table 1</span>
+            </div>
+
+            <!-- Navigation Actions -->
+            <div class="flex items-center space-x-2 flex-wrap">
+                <button onclick="switchView('menu')" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 transition">
+                    <i class="fa-solid fa-utensils mr-1"></i> Menu
+                </button>
+                <button onclick="openCartModal()" id="cartNavBtn" class="relative px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center">
+                    <i class="fa-solid fa-cart-shopping mr-1.5"></i> Cart
+                    <span id="cartCountBadge" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow">0</span>
+                </button>
+                <button onclick="switchView('tables')" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 transition">
+                    <i class="fa-solid fa-qrcode mr-1"></i> Tables
+                </button>
+                <button onclick="switchView('dashboard')" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 transition">
+                    <i class="fa-solid fa-chart-line mr-1"></i> Dashboard
+                </button>
+                <button onclick="switchView('billing')" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 transition">
+                    <i class="fa-solid fa-file-invoice-dollar mr-1"></i> Billing
+                </button>
+                <button onclick="toggleAdminModal()" id="adminNavBtn" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-800 hover:bg-stone-700 text-stone-300 transition border border-stone-700">
+                    <i class="fa-solid fa-lock mr-1" id="adminLockIcon"></i> <span id="adminBtnText">Admin</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 md:p-6">
+
+        <!-- VIEW 1: CUSTOMER MENU -->
+        <section id="menuView" class="space-y-6">
+            <div class="bg-gradient-to-r from-emerald-900/40 via-stone-900 to-emerald-950 p-6 rounded-2xl border border-emerald-900/50 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-bold text-white">Our Delicious Menu</h2>
+                    <p class="text-sm text-stone-400 mt-1">Select your table, browse items with photos & ingredients, and submit your order.</p>
+                </div>
+                <div class="flex items-center gap-3 w-full md:w-auto">
+                    <div class="relative flex-grow md:w-64">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400"><i class="fa-solid fa-search"></i></span>
+                        <input type="text" id="menuSearch" oninput="filterMenu()" placeholder="Search pizzas, garlic bread..." class="w-full pl-9 pr-4 py-2 bg-stone-950 border border-stone-800 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Categories Tabs -->
+            <div id="categoryTabs" class="flex overflow-x-auto pb-2 gap-2 scrollbar-none">
+                <button onclick="filterCategory('All')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-emerald-600 text-white whitespace-nowrap shadow">All Items</button>
+                <button onclick="filterCategory('L\'Arte della Pizza')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700">L'Arte della Pizza</button>
+                <button onclick="filterCategory('Paneer Carnival')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700">Paneer Carnival</button>
+                <button onclick="filterCategory('Veggie Garden')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700">Veggie Garden</button>
+                <button onclick="filterCategory('Garlic Punch')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700">Garlic Punch</button>
+                <button onclick="filterCategory('Sugar & Slice')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700">Sugar & Slice</button>
+                <button onclick="filterCategory('Our Signature')" class="cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700">Our Signature</button>
+            </div>
+
+            <!-- Menu Grid -->
+            <div id="menuGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+
+        <!-- VIEW 2: TABLES & QR CODE GENERATOR -->
+        <section id="tablesView" class="space-y-6 hide">
+            <div class="bg-stone-950 p-6 rounded-2xl border border-stone-800 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Table & QR Code Management</h2>
+                    <p class="text-sm text-stone-400">Add tables dynamically and generate QR codes for customers to scan and order directly.</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <input type="text" id="newTableName" placeholder="e.g. Table 5" class="px-4 py-2 bg-stone-900 border border-stone-700 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+                    <button onclick="addNewTable()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 font-semibold rounded-xl text-sm whitespace-nowrap transition shadow">
+                        <i class="fa-solid fa-plus mr-1"></i> Add Table
+                    </button>
+                </div>
+            </div>
+
+            <div id="tablesGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+        </section>
+
+        <!-- VIEW 3: LIVE DASHBOARD -->
+        <section id="dashboardView" class="space-y-6 hide">
+            <div class="bg-stone-950 p-6 rounded-2xl border border-stone-800 flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Live Kitchen & Table Orders Dashboard</h2>
+                    <p class="text-sm text-stone-400">Track active orders, order time, and item details per table in real-time via Supabase sync.</p>
+                </div>
+                <button onclick="clearAllOrders()" class="px-4 py-2 bg-red-950/50 hover:bg-red-900 border border-red-800 text-red-300 text-xs font-semibold rounded-xl transition">
+                    <i class="fa-solid fa-trash-can mr-1"></i> Clear All Orders
+                </button>
+            </div>
+
+            <div id="dashboardOrdersContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+
+        <!-- VIEW 4: BILLING MODULE -->
+        <section id="billingView" class="space-y-6 hide">
+            <div class="bg-stone-950 p-6 rounded-2xl border border-stone-800 flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white"><i class="fa-solid fa-file-invoice-dollar text-emerald-500 mr-2"></i> Billing & Invoice Generator</h2>
+                    <p class="text-sm text-stone-400">Select a table, enter consumer details, add service charges & GST to print bills.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Billing Controls -->
+                <div class="bg-stone-950 p-6 rounded-2xl border border-stone-800 space-y-4">
+                    <h3 class="font-bold text-white text-base border-b border-stone-900 pb-2">Bill Configuration</h3>
+                    <div>
+                        <label class="text-xs text-stone-400 block mb-1">Select Table</label>
+                        <select id="billTableSelect" onchange="loadTableBillingData()" class="w-full bg-stone-900 border border-stone-700 text-stone-200 text-sm p-2.5 rounded-xl focus:outline-none focus:border-emerald-500">
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-stone-400 block mb-1">Consumer Name</label>
+                        <input type="text" id="billConsumerName" placeholder="Enter guest / consumer name" oninput="calculateBillTotals()" class="w-full bg-stone-900 border border-stone-700 text-stone-200 text-sm p-2.5 rounded-xl focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="text-xs text-stone-400 block mb-1">GST Rate (%)</label>
+                        <input type="number" id="billGstRate" value="5" oninput="calculateBillTotals()" class="w-full bg-stone-900 border border-stone-700 text-stone-200 text-sm p-2.5 rounded-xl focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="text-xs text-stone-400 block mb-1">Service Charges (₹)</label>
+                        <input type="number" id="billServiceCharge" value="0" oninput="calculateBillTotals()" class="w-full bg-stone-900 border border-stone-700 text-stone-200 text-sm p-2.5 rounded-xl focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <button onclick="window.print()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center">
+                        <i class="fa-solid fa-print mr-2"></i> Print Bill / Receipt
+                    </button>
+                </div>
+
+                <!-- Printable Invoice Preview -->
+                <div class="lg:col-span-2 bg-stone-950 p-6 rounded-2xl border border-stone-800 flex flex-col justify-between">
+                    <div id="printableBill" class="bg-white text-stone-900 p-8 rounded-xl shadow-xl space-y-6">
+                        <div class="text-center border-b border-stone-200 pb-4">
+                            <h2 class="text-2xl font-extrabold text-emerald-700">THE GARDEN PIZZA</h2>
+                            <p class="text-xs text-stone-600">Freshly Baked • Made With Love</p>
+                            <p class="text-[11px] text-stone-500 mt-1">Contact: +91 8866593939 / +91 7490863939</p>
+                        </div>
+                        <div class="flex justify-between text-xs border-b border-stone-200 pb-3">
+                            <div>
+                                <p><strong class="text-stone-700">Table:</strong> <span id="billReceiptTable">Table 1</span></p>
+                                <p><strong class="text-stone-700">Consumer:</strong> <span id="billReceiptCustomer">Walk-in Customer</span></p>
+                            </div>
+                            <div class="text-right">
+                                <p><strong class="text-stone-700">Date:</strong> <span id="billReceiptDate">--</span></p>
+                                <p><strong class="text-stone-700">Time:</strong> <span id="billReceiptTime">--</span></p>
+                            </div>
+                        </div>
+                        <table class="w-full text-left text-xs">
+                            <thead>
+                                <tr class="border-b border-stone-300 text-stone-600">
+                                    <th class="py-2">Item Description</th>
+                                    <th class="py-2 text-center">Qty</th>
+                                    <th class="py-2 text-right">Price</th>
+                                    <th class="py-2 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="billReceiptItemsList"></tbody>
+                        </table>
+                        <div class="border-t border-stone-300 pt-3 space-y-1.5 text-xs">
+                            <div class="flex justify-between text-stone-600">
+                                <span>Subtotal</span>
+                                <span id="billReceiptSubtotal">₹0</span>
+                            </div>
+                            <div class="flex justify-between text-stone-600">
+                                <span id="billReceiptGstLabel">GST (5%)</span>
+                                <span id="billReceiptGstAmount">₹0</span>
+                            </div>
+                            <div class="flex justify-between text-stone-600">
+                                <span>Service Charges</span>
+                                <span id="billReceiptServiceAmount">₹0</span>
+                            </div>
+                            <div class="flex justify-between text-base font-extrabold text-stone-900 pt-2 border-t border-stone-300">
+                                <span>Grand Total</span>
+                                <span id="billReceiptGrandTotal">₹0</span>
+                            </div>
+                        </div>
+                        <div class="text-center text-[10px] text-stone-500 border-t border-stone-200 pt-4">
+                            <p>Thank you for dining with us! Please visit again.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- CART SLIDE-OVER / MODAL -->
+    <div id="cartModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hide flex justify-end">
+        <div class="bg-stone-950 w-full max-w-md h-full border-l border-stone-800 p-6 flex flex-col justify-between shadow-2xl">
+            <div class="space-y-4">
+                <div class="flex justify-between items-center border-b border-stone-800 pb-4">
+                    <h3 class="text-lg font-bold text-white flex items-center">
+                        <i class="fa-solid fa-cart-shopping text-emerald-500 mr-2"></i> Your Order Cart
+                    </h3>
+                    <button onclick="closeCartModal()" class="text-stone-400 hover:text-white p-1 rounded-lg">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="bg-stone-900/60 p-3 rounded-xl border border-stone-800 flex justify-between items-center">
+                    <span class="text-xs text-stone-400">Ordering Table:</span>
+                    <select id="cartTableSelect" onchange="updateCartTable(this.value)" class="bg-stone-950 border border-stone-700 text-emerald-400 text-xs font-bold px-3 py-1 rounded-lg focus:outline-none">
+                    </select>
+                </div>
+
+                <div id="cartItemsList" class="space-y-3 max-h-[50vh] overflow-y-auto pr-1"></div>
+            </div>
+
+            <div class="border-t border-stone-800 pt-4 space-y-4">
+                <div class="space-y-1.5 text-sm">
+                    <div class="flex justify-between text-stone-400">
+                        <span>Subtotal</span>
+                        <span id="cartSubtotal">₹0</span>
+                    </div>
+                    <div class="flex justify-between text-stone-400">
+                        <span>Taxes & Charges (5%)</span>
+                        <span id="cartTax">₹0</span>
+                    </div>
+                    <div class="flex justify-between text-lg font-extrabold text-white pt-2 border-t border-stone-800">
+                        <span>Total Amount</span>
+                        <span id="cartTotal" class="text-emerald-400">₹0</span>
+                    </div>
+                </div>
+                <button onclick="submitOrder()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center">
+                    <i class="fa-solid fa-paper-plane mr-2"></i> Submit Final Order
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMIN LOGIN MODAL -->
+    <div id="adminLoginModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hide flex items-center justify-center p-4">
+        <div class="bg-stone-950 border border-stone-800 max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h3 class="font-bold text-white"><i class="fa-solid fa-lock text-emerald-500 mr-2"></i> Admin Authentication</h3>
+                <button onclick="toggleAdminModal()" class="text-stone-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-stone-400">Enter admin credentials to modify dish photos, prices, and recipes.</p>
+            <div class="space-y-3">
+                <input type="text" id="adminUser" placeholder="Username (admin)" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+                <input type="password" id="adminPass" placeholder="Password (admin123)" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+                <button onclick="handleAdminLogin()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition">Login as Admin</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT ITEM MODAL (ADMIN) -->
+    <div id="editItemModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hide flex items-center justify-center p-4">
+        <div class="bg-stone-950 border border-stone-800 max-w-md w-full p-6 rounded-2xl shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h3 class="font-bold text-white"><i class="fa-solid fa-pen-to-square text-emerald-500 mr-2"></i> Edit Dish Details</h3>
+                <button onclick="closeEditModal()" class="text-stone-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <input type="hidden" id="editItemId">
+            <div class="space-y-3 text-sm">
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">Dish Name</label>
+                    <input type="text" id="editItemName" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">Category</label>
+                    <input type="text" id="editItemCategory" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">Price (₹)</label>
+                    <input type="number" id="editItemPrice" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">Ingredients / Description</label>
+                    <textarea id="editItemIngredients" rows="3" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl focus:outline-none focus:border-emerald-500"></textarea>
+                </div>
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">Photo Image URL</label>
+                    <input type="text" id="editItemImage" class="w-full px-3 py-2 bg-stone-900 border border-stone-700 rounded-xl focus:outline-none focus:border-emerald-500" placeholder="https://...">
+                </div>
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">Or Upload Local Photo</label>
+                    <input type="file" id="editItemFile" accept="image/*" onchange="handleImageUpload(event)" class="w-full text-xs text-stone-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-stone-800 file:text-emerald-400 hover:file:bg-stone-700">
+                </div>
+                <button onclick="saveItemChanges()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition shadow">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR CODE VIEW MODAL -->
+    <div id="qrModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hide flex items-center justify-center p-4">
+        <div class="bg-stone-950 border border-stone-800 max-w-sm w-full p-6 rounded-2xl shadow-2xl text-center space-y-4">
+            <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h3 id="qrModalTitle" class="font-bold text-white">Table QR Code</h3>
+                <button onclick="closeQrModal()" class="text-stone-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="qrcodeContainer" class="bg-white p-4 rounded-2xl inline-block mx-auto shadow-inner"></div>
+            <p id="qrModalUrl" class="text-xs text-stone-400 break-all"></p>
+            <button onclick="closeQrModal()" class="w-full py-2 bg-stone-800 hover:bg-stone-700 text-white font-semibold rounded-xl text-sm transition">Close</button>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="bg-stone-950 border-t border-stone-800 py-6 text-center text-xs text-stone-500 mt-auto">
+        <p>The Garden Pizza • Fresh Ingredients, Great Taste | Contact: +91 8866593939 / +91 7490863939</p>
+    </footer>
+
+    <script>
+        // Configured with your Supabase credentials
+        const SUPABASE_URL = 'https://ctfhmddesmyncvwnxvhj.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_dNl-4VIZ2mgEqJx6OA72fw_3V8OyiXq';
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const defaultMenuItems = [
+            { id: 1, name: "Margherita Pizza", category: "L'Arte della Pizza", price: 219, ingredients: "Special sauce, fresh basil leaves, mozzarella, Italian seasoning", image: "https://images.unsplash.com/photo-1604382355076-af4b0eb60143?w=500&q=80", tag: "" },
+            { id: 2, name: "The Funghi", category: "L'Arte della Pizza", price: 249, ingredients: "Special sauce, mozzarella, mushrooms, Italian seasoning", image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&q=80", tag: "" },
+            { id: 3, name: "Pesto Pizza", category: "L'Arte della Pizza", price: 269, ingredients: "Fresh pesto sauce, mozzarella, cherry tomatoes, Parmesan, fresh basil", image: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=500&q=80", tag: "" },
+            { id: 4, name: "Italian Garden Pizza", category: "L'Arte della Pizza", price: 269, ingredients: "Special sauce, mozzarella, bell peppers, onion, corn, mushroom, green olives, black olives, jalapeño, baby corn", image: "https://images.unsplash.com/photo-1593560708920-61dd98c46a4e?w=500&q=80", tag: "" },
+            { id: 5, name: "Mexican Fiesta", category: "L'Arte della Pizza", price: 279, ingredients: "Mexican salsa, mozzarella, onion, capsicum, sweet corn, jalapeño, black olives, green olives, Mexican seasoning, beans, bell peppers", image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=500&q=80", tag: "" },
+            { id: 6, name: "Mexican Salsa Blast", category: "L'Arte della Pizza", price: 269, ingredients: "Spicy salsa, mozzarella, tomato, bell peppers, red paprika, chilli flakes, kidney beans", image: "https://images.unsplash.com/photo-1588315029754-2dd089d39a1a?w=500&q=80", tag: "" },
+            { id: 7, name: "Classic Paneer Tikka Pizza", category: "Paneer Carnival", price: 239, ingredients: "Special Punjabi sauce, paneer, onion, capsicum, mozzarella, Punjabi seasoning, hint of garlic", image: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500&q=80", tag: "" },
+            { id: 8, name: "Spicy Peri-Peri Paneer", category: "Paneer Carnival", price: 245, ingredients: "Special Punjabi sauce, peri-peri paneer, jalapeño, onion, regular & mozzarella cheese, peri-peri seasoning", image: "https://images.unsplash.com/photo-1595731174624-42f8319e71f4?w=500&q=80", tag: "" },
+            { id: 9, name: "Paneer Paradise", category: "Paneer Carnival", price: 245, ingredients: "Special tandoori sauce, paneer, capsicum, onion, hint of garlic", image: "https://images.unsplash.com/photo-1594007654729-407eedc4be65?w=500&q=80", tag: "" },
+            { id: 10, name: "Paneer Veggie Garden", category: "Paneer Carnival", price: 259, ingredients: "Special sauce, paneer, onion, capsicum, olives, corn, mushroom, regular cheese & mozzarella", image: "https://images.unsplash.com/photo-1534308983496-4fabb1a015ee?w=500&q=80", tag: "" },
+            { id: 11, name: "Veggie Fiesta", category: "Veggie Garden", price: 249, ingredients: "Special sauce, onion, capsicum, sweet corn, jalapeño, black olives, green olives, cheese, seasoning", image: "https://images.unsplash.com/photo-1512485800893-b08ec1ea49b1?w=500&q=80", tag: "" },
+            { id: 12, name: "Corn & Crunch", category: "Veggie Garden", price: 249, ingredients: "Special sauce, sweet corn, onion, capsicum, Crispy Nachos, cheese", image: "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=500&q=80", tag: "" },
+            { id: 13, name: "Spicy Veggie Bomb", category: "Veggie Garden", price: 259, ingredients: "Special sauce, jalapeño, onion, capsicum, bell peppers, chilli flakes, green chilli, olives, mozzarella, Italian seasoning", image: "https://images.unsplash.com/photo-1571407970349-bc81e7e96d47?w=500&q=80", tag: "" },
+            { id: 14, name: "Veggie Supreme", category: "Veggie Garden", price: 259, ingredients: "Special sauce, onion, capsicum, bell peppers, sweet corn, baby corn, green & black olives, mozzarella", image: "https://images.unsplash.com/photo-1590947132387-155cc02f3212?w=500&q=80", tag: "" },
+            { id: 15, name: "Classic Garlic Melt", category: "Garlic Punch", price: 190, ingredients: "Garlic butter, mozzarella, Italian seasoning", image: "https://images.unsplash.com/photo-1619531003075-1776c53da33e?w=500&q=80", tag: "" },
+            { id: 16, name: "Fiery Garlic Bread", category: "Garlic Punch", price: 199, ingredients: "Herb butter, mozzarella, jalapeño, green chilli, chilli flakes", image: "https://images.unsplash.com/photo-1544025162-d76694265947?w=500&q=80", tag: "SPICY" },
+            { id: 17, name: "All in One", category: "Garlic Punch", price: 210, ingredients: "Garlic butter, mozzarella, corn, capsicum, onion, olives", image: "https://images.unsplash.com/photo-1541745537411-b8046dc6d66c?w=500&q=80", tag: "" },
+            { id: 18, name: "Punjabi Twist", category: "Garlic Punch", price: 210, ingredients: "Garlic butter, onion, capsicum, paneer, mozzarella, Punjabi seasoning", image: "https://images.unsplash.com/photo-1627308595229-7830a5c91f9f?w=500&q=80", tag: "SPICY" },
+            { id: 19, name: "Nutella Crunch", category: "Sugar & Slice", price: 299, ingredients: "Hazelnut chocolate spread, walnut chunks, chocolate chips, Parmesan cheese", image: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=500&q=80", tag: "" },
+            { id: 20, name: "Heavenly Slices", category: "Sugar & Slice", price: 299, ingredients: "Hazelnut chocolate spread, walnut, almond flakes, vanilla ice-cream, drizzled with chocolate spread", image: "https://images.unsplash.com/photo-1587314168485-3236d6710814?w=500&q=80", tag: "" },
+            { id: 21, name: "Cheesy Paneer Loaded", category: "Our Signature", price: 299, ingredients: "Cheese Sauce, Paneer, Mozzarella, Cheddar Sp. Seasoning", image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=500&q=80", tag: "SPECIAL" },
+            { id: 22, name: "The Garden Pizza", category: "Our Signature", price: 299, ingredients: "Special sauce, sweet corn, baby corn, zucchini, mushroom, basil, onion, bell peppers, jalapeño, pesto, mozzarella & Parmesan cheese", image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&q=80", tag: "SPECIAL" },
+            { id: 23, name: "4 Cheese Special", category: "Our Signature", price: 299, ingredients: "Mozzarella, Cheddar, parmesan, blue cheese, Italian herbs", image: "https://images.unsplash.com/photo-1573821663912-569905455b1c?w=500&q=80", tag: "" }
+        ];
+
+        let menuItems = JSON.parse(localStorage.getItem('garden_menu_items')) || defaultMenuItems;
+        let tables = JSON.parse(localStorage.getItem('garden_tables')) || ["Table 1", "Table 2", "Table 3", "Table 4"];
+        let cart = JSON.parse(localStorage.getItem('garden_cart')) || [];
+        let orders = [];
+        let currentTable = localStorage.getItem('garden_current_table') || tables[0];
+        let isAdmin = localStorage.getItem('garden_is_admin') === 'true';
+        let currentCategory = 'All';
+
+        window.onload = async function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tableParam = urlParams.get('table');
+            if (tableParam && tables.includes(tableParam)) {
+                currentTable = tableParam;
+                localStorage.setItem('garden_current_table', currentTable);
+            }
+
+            await fetchAndRenderOrders();
+
+            // Real-time Supabase subscription
+            try {
+                supabaseClient
+                    .channel('public:orders')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, payload => {
+                        fetchAndRenderOrders();
+                    })
+                    .subscribe();
+            } catch (err) {
+                console.log("Supabase realtime error:", err);
+            }
+
+            updateAdminUI();
+            updateTableBadge();
+            renderMenu();
+            renderTables();
+            updateCartBadge();
+            populateCartTableSelect();
+            populateBillingTableSelect();
+        };
+
+        async function fetchAndRenderOrders() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('orders')
+                    .select('*')
+                    .order('id', { ascending: false });
+
+                if (error) throw error;
+
+                orders = (data || []).map(r => ({
+                    supabaseId: r.id,
+                    id: r.order_id,
+                    table: r.table_name,
+                    items: r.items,
+                    subtotal: r.subtotal,
+                    tax: r.tax,
+                    total: r.total,
+                    status: r.status,
+                    time: r.time,
+                    date: r.date
+                }));
+
+                renderDashboard();
+                if(!document.getElementById('billingView').classList.contains('hide')) {
+                    loadTableBillingData();
+                }
+            } catch (error) {
+                console.error("Error fetching orders from Supabase:", error);
+            }
+        }
+
+        function switchView(viewName) {
+            document.getElementById('menuView').classList.add('hide');
+            document.getElementById('tablesView').classList.add('hide');
+            document.getElementById('dashboardView').classList.add('hide');
+            document.getElementById('billingView').classList.add('hide');
+
+            if (viewName === 'menu') document.getElementById('menuView').classList.remove('hide');
+            if (viewName === 'tables') { renderTables(); document.getElementById('tablesView').classList.remove('hide'); }
+            if (viewName === 'dashboard') { renderDashboard(); document.getElementById('dashboardView').classList.remove('hide'); }
+            if (viewName === 'billing') { populateBillingTableSelect(); loadTableBillingData(); document.getElementById('billingView').classList.remove('hide'); }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function updateTableBadge() {
+            const badge = document.getElementById('tableBadgeContainer');
+            const label = document.getElementById('currentTableLabel');
+            if (currentTable) {
+                badge.classList.remove('hidden');
+                badge.classList.add('flex');
+                label.innerText = currentTable;
+            } else {
+                badge.classList.add('hidden');
+                badge.classList.remove('flex');
+            }
+        }
+
+        function addNewTable() {
+            const input = document.getElementById('newTableName');
+            const tableName = input.value.trim();
+            if (!tableName) return alert('Please enter a table name');
+            if (tables.includes(tableName)) return alert('Table already exists');
+            tables.push(tableName);
+            localStorage.setItem('garden_tables', JSON.stringify(tables));
+            input.value = '';
+            renderTables();
+            populateCartTableSelect();
+            populateBillingTableSelect();
+        }
+
+        function deleteTable(tableName) {
+            if (tables.length <= 1) return alert('You must keep at least one table.');
+            if (confirm(`Are you sure you want to delete ${tableName}?`)) {
+                tables = tables.filter(t => t !== tableName);
+                localStorage.setItem('garden_tables', JSON.stringify(tables));
+                if (currentTable === tableName) {
+                    currentTable = tables[0];
+                    localStorage.setItem('garden_current_table', currentTable);
+                    updateTableBadge();
+                }
+                renderTables();
+                populateCartTableSelect();
+                populateBillingTableSelect();
+            }
+        }
+
+        function renderTables() {
+            const container = document.getElementById('tablesGrid');
+            container.innerHTML = '';
+            tables.forEach(table => {
+                const isCurrent = currentTable === table;
+                container.innerHTML += `
+                    <div class="bg-stone-900 border ${isCurrent ? 'border-emerald-500 shadow-emerald-900/30' : 'border-stone-800'} p-5 rounded-2xl flex flex-col justify-between space-y-4 shadow-xl">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-lg text-white"><i class="fa-solid fa-chair text-emerald-400 mr-2"></i> ${table}</h3>
+                                <p class="text-xs text-stone-400 mt-0.5">${isCurrent ? 'Current Active Session' : 'Ready to scan'}</p>
+                            </div>
+                            ${isAdmin ? `<button onclick="deleteTable('${table}')" class="text-red-400 hover:text-red-300 p-1"><i class="fa-solid fa-trash text-sm"></i></button>` : ''}
+                        </div>
+                        <div class="flex justify-center bg-white p-3 rounded-xl cursor-pointer" onclick="showQrModal('${table}')" title="Click to enlarge QR">
+                            <div id="qr-thumb-${table.replace(/\s+/g, '')}" class="w-28 h-28 flex items-center justify-center"></div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="selectTable('${table}')" class="flex-1 py-2 ${isCurrent ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-stone-300 hover:bg-stone-700'} text-xs font-semibold rounded-xl transition">
+                                ${isCurrent ? 'Active Table' : 'Select Table'}
+                            </button>
+                            <button onclick="showQrModal('${table}')" class="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs rounded-xl transition">
+                                <i class="fa-solid fa-qrcode"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            tables.forEach(table => {
+                const el = document.getElementById(`qr-thumb-${table.replace(/\s+/g, '')}`);
+                if (el) {
+                    el.innerHTML = '';
+                    const pageUrl = window.location.origin + window.location.pathname + "?table=" + encodeURIComponent(table);
+                    new QRCode(el, { text: pageUrl, width: 100, height: 100 });
+                }
+            });
+        }
+
+        function selectTable(tableName) {
+            currentTable = tableName;
+            localStorage.setItem('garden_current_table', currentTable);
+            updateTableBadge();
+            renderTables();
+            switchView('menu');
+        }
+
+        function showQrModal(tableName) {
+            document.getElementById('qrModalTitle').innerText = `${tableName} QR Code`;
+            const container = document.getElementById('qrcodeContainer');
+            container.innerHTML = '';
+            const pageUrl = window.location.origin + window.location.pathname + "?table=" + encodeURIComponent(tableName);
+            document.getElementById('qrModalUrl').innerText = pageUrl;
+            new QRCode(container, { text: pageUrl, width: 180, height: 180 });
+            document.getElementById('qrModal').classList.remove('hide');
+        }
+
+        function closeQrModal() {
+            document.getElementById('qrModal').classList.add('hide');
+        }
+
+        function renderMenu() {
+            const grid = document.getElementById('menuGrid');
+            const search = document.getElementById('menuSearch').value.toLowerCase();
+            grid.innerHTML = '';
+
+            const filtered = menuItems.filter(item => {
+                const matchesCat = currentCategory === 'All' || item.category === currentCategory;
+                const matchesSearch = item.name.toLowerCase().includes(search) || item.ingredients.toLowerCase().includes(search);
+                return matchesCat && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-12 text-center text-stone-500">No dishes found matching your search.</div>`;
+                return;
+            }
+
+            filtered.forEach(item => {
+                grid.innerHTML += `
+                    <div class="bg-stone-950 border border-stone-800 rounded-2xl overflow-hidden shadow-xl flex flex-col justify-between group hover:border-emerald-800 transition">
+                        <div>
+                            <div class="relative h-48 overflow-hidden bg-stone-900">
+                                <img src="${item.image}" alt="${item.name}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                                ${item.tag ? `<span class="absolute top-3 left-3 bg-red-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider shadow">${item.tag}</span>` : ''}
+                                <span class="absolute top-3 right-3 bg-stone-950/80 backdrop-blur-md text-emerald-400 font-bold px-3 py-1 rounded-full text-sm shadow">₹${item.price}</span>
+                                ${isAdmin ? `<button onclick="openEditModal(${item.id})" class="absolute bottom-3 right-3 bg-emerald-600 hover:bg-emerald-500 text-white w-9 h-9 rounded-full shadow-lg flex items-center justify-center transition"><i class="fa-solid fa-pen text-xs"></i></button>` : ''}
+                            </div>
+                            <div class="p-5 space-y-2">
+                                <span class="text-[10px] uppercase font-bold text-emerald-500 tracking-wider">${item.category}</span>
+                                <h3 class="text-lg font-bold text-white">${item.name}</h3>
+                                <p class="text-xs text-stone-400 line-clamp-2 leading-relaxed">${item.ingredients}</p>
+                            </div>
+                        </div>
+                        <div class="p-5 pt-0">
+                            <button onclick="addToCart(${item.id})" class="w-full py-2.5 bg-stone-900 hover:bg-emerald-600 hover:text-white text-stone-200 text-xs font-bold rounded-xl border border-stone-800 transition flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-plus"></i> <span>Add to Order</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function filterCategory(cat) {
+            currentCategory = cat;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                if (btn.innerText.includes(cat) || (cat === 'All' && btn.innerText.includes('All'))) {
+                    btn.className = "cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-emerald-600 text-white whitespace-nowrap shadow";
+                } else {
+                    btn.className = "cat-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-stone-800 text-stone-300 whitespace-nowrap hover:bg-stone-700";
+                }
+            });
+            renderMenu();
+        }
+
+        function filterMenu() {
+            renderMenu();
+        }
+
+        function addToCart(itemId) {
+            const item = menuItems.find(i => i.id === itemId);
+            if (!item) return;
+            const existing = cart.find(c => c.id === itemId);
+            if (existing) {
+                existing.qty += 1;
+            } else {
+                cart.push({ ...item, qty: 1 });
+            }
+            saveCart();
+            updateCartBadge();
+            openCartModal();
+        }
+
+        function updateCartQty(itemId, change) {
+            const item = cart.find(c => c.id === itemId);
+            if (!item) return;
+            item.qty += change;
+            if (item.qty <= 0) {
+                cart = cart.filter(c => c.id !== itemId);
+            }
+            saveCart();
+            updateCartBadge();
+            renderCartItems();
+        }
+
+        function saveCart() {
+            localStorage.setItem('garden_cart', JSON.stringify(cart));
+        }
+
+        function updateCartBadge() {
+            const count = cart.reduce((acc, item) => acc + item.qty, 0);
+            document.getElementById('cartCountBadge').innerText = count;
+        }
+
+        function openCartModal() {
+            renderCartItems();
+            populateCartTableSelect();
+            document.getElementById('cartModal').classList.remove('hide');
+        }
+
+        function closeCartModal() {
+            document.getElementById('cartModal').classList.add('hide');
+        }
+
+        function populateCartTableSelect() {
+            const select = document.getElementById('cartTableSelect');
+            select.innerHTML = '';
+            tables.forEach(t => {
+                select.innerHTML += `<option value="${t}" ${t === currentTable ? 'selected' : ''}>${t}</option>`;
+            });
+        }
+
+        function updateCartTable(val) {
+            currentTable = val;
+            localStorage.setItem('garden_current_table', currentTable);
+            updateTableBadge();
+        }
+
+        function renderCartItems() {
+            const list = document.getElementById('cartItemsList');
+            list.innerHTML = '';
+
+            if (cart.length === 0) {
+                list.innerHTML = `<div class="py-12 text-center text-stone-500 text-sm">Your cart is empty. Add delicious pizzas from the menu!</div>`;
+                document.getElementById('cartSubtotal').innerText = '₹0';
+                document.getElementById('cartTax').innerText = '₹0';
+                document.getElementById('cartTotal').innerText = '₹0';
+                return;
+            }
+
+            let subtotal = 0;
+            cart.forEach(item => {
+                subtotal += item.price * item.qty;
+                list.innerHTML += `
+                    <div class="bg-stone-900 border border-stone-800 p-3 rounded-xl flex items-center justify-between gap-3">
+                        <div class="flex items-center space-x-3">
+                            <img src="${item.image}" class="w-12 h-12 rounded-lg object-cover">
+                            <div>
+                                <h4 class="text-sm font-bold text-white">${item.name}</h4>
+                                <p class="text-xs text-emerald-400 font-semibold">₹${item.price} × ${item.qty} = ₹${item.price * item.qty}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="updateCartQty(${item.id}, -1)" class="w-7 h-7 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-minus"></i></button>
+                            <span class="text-sm font-bold w-5 text-center">${item.qty}</span>
+                            <button onclick="updateCartQty(${item.id}, 1)" class="w-7 h-7 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            const tax = Math.round(subtotal * 0.05);
+            const total = subtotal + tax;
+
+            document.getElementById('cartSubtotal').innerText = `₹${subtotal}`;
+            document.getElementById('cartTax').innerText = `₹${tax}`;
+            document.getElementById('cartTotal').innerText = `₹${total}`;
+        }
+
+        async function submitOrder() {
+            if (cart.length === 0) return alert('Your cart is empty.');
+            
+            const subtotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+            const tax = Math.round(subtotal * 0.05);
+            const total = subtotal + tax;
+
+            const newOrderData = {
+                order_id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
+                table_name: currentTable,
+                items: [...cart],
+                subtotal: subtotal,
+                tax: tax,
+                total: total,
+                status: 'Preparing',
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                date: new Date().toLocaleDateString()
+            };
+
+            try {
+                const { error } = await supabaseClient.from('orders').insert([newOrderData]);
+                if (error) throw error;
+
+                cart = [];
+                saveCart();
+                updateCartBadge();
+                closeCartModal();
+                alert(`Order submitted successfully for ${currentTable}! Redirecting to Live Dashboard.`);
+                switchView('dashboard');
+            } catch (error) {
+                console.error("Error creating order in Supabase:", error);
+                alert("Error submitting order. Please check your Supabase configuration keys.");
+            }
+        }
+
+        function renderDashboard() {
+            const container = document.getElementById('dashboardOrdersContainer');
+            container.innerHTML = '';
+
+            if (orders.length === 0) {
+                container.innerHTML = `<div class="col-span-full py-16 text-center text-stone-500 bg-stone-950 border border-stone-800 rounded-2xl">No active table orders yet. Orders scanned and submitted by customers will appear here in real-time.</div>`;
+                return;
+            }
+
+            orders.forEach(order => {
+                let itemsHtml = '';
+                if (order.items && Array.isArray(order.items)) {
+                    order.items.forEach(i => {
+                        itemsHtml += `<div class="flex justify-between text-xs text-stone-300 py-1 border-b border-stone-900"><span>${i.qty}x ${i.name}</span><span class="font-semibold text-emerald-400">₹${i.price * i.qty}</span></div>`;
+                    });
+                }
+
+                container.innerHTML += `
+                    <div class="bg-stone-950 border border-stone-800 p-5 rounded-2xl shadow-xl flex flex-col justify-between space-y-4">
+                        <div class="flex justify-between items-start border-b border-stone-900 pb-3">
+                            <div>
+                                <span class="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">${order.table}</span>
+                                <h3 class="font-extrabold text-white text-base mt-2">${order.id}</h3>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs text-stone-400 block"><i class="fa-regular fa-clock mr-1"></i>${order.time}</span>
+                                <select onchange="updateOrderStatus(${order.supabaseId}, this.value)" class="mt-1 bg-stone-900 border border-stone-700 text-xs font-bold text-emerald-400 px-2 py-1 rounded-lg focus:outline-none">
+                                    <option value="Preparing" ${order.status === 'Preparing' ? 'selected' : ''}>Preparing</option>
+                                    <option value="Served" ${order.status === 'Served' ? 'selected' : ''}>Served</option>
+                                    <option value="Completed" ${order.status === 'Completed' ? 'selected' : ''}>Completed</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-[10px] text-stone-500 uppercase font-bold">Ordered Items & Details:</p>
+                            ${itemsHtml}
+                        </div>
+                        <div class="pt-2 border-t border-stone-900 flex justify-between items-center text-sm">
+                            <span class="font-bold text-stone-400">Total Bill</span>
+                            <span class="font-extrabold text-emerald-400">₹${order.total}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function updateOrderStatus(supabaseId, status) {
+            try {
+                await supabaseClient.from('orders').update({ status: status }).eq('id', supabaseId);
+            } catch (error) {
+                console.error("Error updating order status:", error);
+            }
+        }
+
+        async function clearAllOrders() {
+            if (confirm('Are you sure you want to clear all orders?')) {
+                try {
+                    await supabaseClient.from('orders').delete().neq('id', 0);
+                    fetchAndRenderOrders();
+                } catch (error) {
+                    console.error("Error clearing orders:", error);
+                }
+            }
+        }
+
+        function populateBillingTableSelect() {
+            const select = document.getElementById('billTableSelect');
+            if(!select) return;
+            select.innerHTML = '';
+            tables.forEach(t => {
+                select.innerHTML += `<option value="${t}">${t}</option>`;
+            });
+            loadTableBillingData();
+        }
+
+        function loadTableBillingData() {
+            const selectedTable = document.getElementById('billTableSelect').value;
+            const tableOrders = orders.filter(o => o.table === selectedTable);
+            
+            let combinedItems = {};
+            let orderDate = new Date().toLocaleDateString();
+            let orderTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            tableOrders.forEach(ord => {
+                orderDate = ord.date || orderDate;
+                orderTime = ord.time || orderTime;
+                if(ord.items && Array.isArray(ord.items)) {
+                    ord.items.forEach(item => {
+                        if (combinedItems[item.id]) {
+                            combinedItems[item.id].qty += item.qty;
+                        } else {
+                            combinedItems[item.id] = { ...item };
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('billReceiptTable').innerText = selectedTable;
+            document.getElementById('billReceiptDate').innerText = orderDate;
+            document.getElementById('billReceiptTime').innerText = orderTime;
+
+            const customerNameInput = document.getElementById('billConsumerName').value.trim() || `${selectedTable} Guest`;
+            document.getElementById('billReceiptCustomer').innerText = customerNameInput;
+
+            const itemsListEl = document.getElementById('billReceiptItemsList');
+            itemsListEl.innerHTML = '';
+
+            let subtotal = 0;
+            const itemsArray = Object.values(combinedItems);
+
+            if (itemsArray.length === 0) {
+                itemsListEl.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-stone-400">No active orders found for ${selectedTable}.</td></tr>`;
+            } else {
+                itemsArray.forEach(item => {
+                    const itemTotal = item.price * item.qty;
+                    subtotal += itemTotal;
+                    itemsListEl.innerHTML += `
+                        <tr class="border-b border-stone-100">
+                            <td class="py-2 text-stone-800 font-medium">${item.name}</td>
+                            <td class="py-2 text-center text-stone-600">${item.qty}</td>
+                            <td class="py-2 text-right text-stone-600">₹${item.price}</td>
+                            <td class="py-2 text-right font-semibold text-stone-800">₹${itemTotal}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            document.getElementById('billReceiptSubtotal').innerText = `₹${subtotal}`;
+            calculateBillTotals(subtotal);
+        }
+
+        function calculateBillTotals(precalculatedSubtotal) {
+            let subtotal = precalculatedSubtotal;
+            if (subtotal === undefined) {
+                const selectedTable = document.getElementById('billTableSelect').value;
+                const tableOrders = orders.filter(o => o.table === selectedTable);
+                subtotal = 0;
+                tableOrders.forEach(ord => {
+                    if(ord.items) {
+                        ord.items.forEach(item => { subtotal += item.price * item.qty; });
+                    }
+                });
+            }
+
+            const gstRate = parseFloat(document.getElementById('billGstRate').value) || 0;
+            const serviceCharge = parseFloat(document.getElementById('billServiceCharge').value) || 0;
+
+            const gstAmount = Math.round((subtotal * gstRate) / 100);
+            const grandTotal = subtotal + gstAmount + serviceCharge;
+
+            document.getElementById('billReceiptGstLabel').innerText = `GST (${gstRate}%)`;
+            document.getElementById('billReceiptGstAmount').innerText = `₹${gstAmount}`;
+            document.getElementById('billReceiptServiceAmount').innerText = `₹${serviceCharge}`;
+            document.getElementById('billReceiptGrandTotal').innerText = `₹${grandTotal}`;
+
+            const customerNameInput = document.getElementById('billConsumerName').value.trim() || `${document.getElementById('billTableSelect').value} Guest`;
+            document.getElementById('billReceiptCustomer').innerText = customerNameInput;
+        }
+
+        function toggleAdminModal() {
+            if (isAdmin) {
+                if (confirm('Logout from Admin mode?')) {
+                    isAdmin = false;
+                    localStorage.setItem('garden_is_admin', 'false');
+                    updateAdminUI();
+                    renderMenu();
+                    renderTables();
+                }
+            } else {
+                document.getElementById('adminLoginModal').classList.remove('hide');
+            }
+        }
+
+        function handleAdminLogin() {
+            const u = document.getElementById('adminUser').value;
+            const p = document.getElementById('adminPass').value;
+            if (u === 'admin' && p === 'admin123') {
+                isAdmin = true;
+                localStorage.setItem('garden_is_admin', 'true');
+                document.getElementById('adminLoginModal').classList.add('hide');
+                document.getElementById('adminUser').value = '';
+                document.getElementById('adminPass').value = '';
+                updateAdminUI();
+                renderMenu();
+                renderTables();
+                alert('Logged in as Admin successfully!');
+            } else {
+                alert('Invalid credentials! Use admin / admin123');
+            }
+        }
+
+        function updateAdminUI() {
+            const icon = document.getElementById('adminLockIcon');
+            const text = document.getElementById('adminBtnText');
+            if (isAdmin) {
+                icon.className = "fa-solid fa-lock-open text-emerald-400 mr-1";
+                text.innerText = "Admin (ON)";
+            } else {
+                icon.className = "fa-solid fa-lock mr-1";
+                text.innerText = "Admin";
+            }
+        }
+
+        function openEditModal(itemId) {
+            const item = menuItems.find(i => i.id === itemId);
+            if (!item) return;
+            document.getElementById('editItemId').value = item.id;
+            document.getElementById('editItemName').value = item.name;
+            document.getElementById('editItemCategory').value = item.category;
+            document.getElementById('editItemPrice').value = item.price;
+            document.getElementById('editItemIngredients').value = item.ingredients;
+            document.getElementById('editItemImage').value = item.image;
+            document.getElementById('editItemModal').classList.remove('hide');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editItemModal').classList.add('hide');
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('editItemImage').value = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function saveItemChanges() {
+            const id = parseInt(document.getElementById('editItemId').value);
+            const item = menuItems.find(i => i.id === id);
+            if (item) {
+                item.name = document.getElementById('editItemName').value;
+                item.category = document.getElementById('editItemCategory').value;
+                item.price = parseFloat(document.getElementById('editItemPrice').value) || item.price;
+                item.ingredients = document.getElementById('editItemIngredients').value;
+                item.image = document.getElementById('editItemImage').value;
+
+                localStorage.setItem('garden_menu_items', JSON.stringify(menuItems));
+                closeEditModal();
+                renderMenu();
+                alert('Dish updated successfully!');
+            }
+        }
+    </script>
+</body>
+</html>
